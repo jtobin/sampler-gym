@@ -6,3 +6,6 @@ Unit
 *.out
 *.pdf
 *.png
+working
+demos
+data/output
