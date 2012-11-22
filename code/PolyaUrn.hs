@@ -79,8 +79,8 @@ runUrn :: PrimMonad m => Options -> Gen (PrimState m) -> Producer Urn m ()
 runUrn opts g0
     | nepochs opts < 0 = error "observeProcess: iterations must be >= 0."
     | alpha   opts < 0 = error "observeProcess: alpha must be > 0."
-    | otherwise        = do h <- lift $ go n0 HashMap.empty p0 a0 g0
-                            yield h
+    | otherwise        = do urn <- lift $ go n0 HashMap.empty p0 a0 g0
+                            yield urn
   where 
     (n0, p0, a0) = (\x -> (nepochs x, grid x, alpha x)) opts
     go 0 u _ _ _  = return u 

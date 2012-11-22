@@ -2,3 +2,5 @@ Unit
 .git
 .DS_Store
 .exrc
+*.swp
+*.out

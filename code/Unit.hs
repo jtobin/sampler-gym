@@ -30,7 +30,7 @@ main = do
                           , grid    = Grid 0 gUpper } 
 
     let pipe0 = runUrn opts g >+> massTransformer >+> printer
-        pipe1 = runUrn opts g >+> massTransformer >+> mixer 1.0 >+> sampler nFlatSamples nParticles opts g
+        pipe1 = runUrn opts g >+> massTransformer >+> gaussMixer 1.0 >+> sampler nFlatSamples nParticles opts g
 
     runPipe pipe1
 
