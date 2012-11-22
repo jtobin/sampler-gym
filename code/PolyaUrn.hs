@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, TemplateHaskell #-}
 
 module PolyaUrn where
 
@@ -8,8 +8,8 @@ import Control.Arrow
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Primitive
-import Data.Maybe 
 import Data.List
+import Data.Maybe 
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import System.Random.MWC
@@ -18,6 +18,8 @@ import GHC.Float
 import Test.QuickCheck.Gen hiding (Gen, sample)
 import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Modifiers
+import Test.QuickCheck.All
+import Test.QuickCheck (quickCheckWithResult, stdArgs, maxSuccess)
 
 -- Data/types ------------------------------------------------------------------
 
@@ -40,14 +42,15 @@ gridBounds :: Grid -> (Double, Double)
 gridBounds (Grid g0 g1) = (g0, g1)
 
 massFunction :: Fractional b => Urn -> [b]
-massFunction urn = (map snd . HashMap.toList . HashMap.map ((/ n) . fromIntegral)) urn
-    where n = fromIntegral $ ballsInUrn urn
+massFunction urn = 
+    (map snd . HashMap.toList . HashMap.map ((/ n) . fromIntegral)) urn
+  where n = fromIntegral $ ballsInUrn urn
 {-# INLINE massFunction #-}
 
 cumulativeProbs :: Urn -> [Double]
 cumulativeProbs h = if   n > 0 
                     then   scanl1 (+) . map snd . HashMap.toList 
-                         . HashMap.map ((/ n) . fromIntegral) $ h
+                         . HashMap.map ((/ n) . fromIntegral) $ h 
                     else error "cumulativeProbs: empty urn."
     where n = fromIntegral $ ballsInUrn h
 {-# INLINE cumulativeProbs #-}
@@ -75,8 +78,8 @@ sampleFromUrn urn g = do
     
 -- Main ------------------------------------------------------------------------
 
-runUrn :: PrimMonad m => Options -> Gen (PrimState m) -> Producer Urn m ()
-runUrn opts g0
+polyaUrn :: PrimMonad m => Options -> Gen (PrimState m) -> Producer Urn m ()
+polyaUrn opts g0
     | nepochs opts < 0 = error "observeProcess: iterations must be >= 0."
     | alpha   opts < 0 = error "observeProcess: alpha must be > 0."
     | otherwise        = do urn <- lift $ go n0 HashMap.empty p0 a0 g0
@@ -89,7 +92,7 @@ runUrn opts g0
       (b, c)  <- if   zc < a / (a + fromIntegral (ballsInUrn u))
                  then sampleFromGrid p g else sampleFromUrn  u g
       go (n - 1) (HashMap.insert b c u) p a g
-{-# INLINE runUrn #-}
+{-# INLINE polyaUrn #-}
 
 -- Testing ---------------------------------------------------------------------
 
@@ -109,6 +112,10 @@ prop_sampleFindsElements (Ordered xs) (NonNegative p) =
 prop_massFunctionSumsToOne :: Urn -> Bool
 prop_massFunctionSumsToOne urn = (double2Float . sum . massFunction) urn == 1
 
+prop_massFunctionElementsAreProbabilities :: Urn -> Bool
+prop_massFunctionElementsAreProbabilities urn = all (>= 0) m && all (<= 1) m
+    where m = map double2Float $ massFunction urn
+
 prop_ballsCountedCorrectly :: Urn -> Bool
 prop_ballsCountedCorrectly h = ballsInUrn h == numBalls
   where numBalls = foldr ((+) . snd) 0 (HashMap.toList h)
@@ -118,4 +125,7 @@ prop_cumulativeProbsAreProbs h =
     all (>= 0) cprobs && all (<= 1) cprobs
   where cprobs = map double2Float $ cumulativeProbs h
 
+runTestSuite :: IO Bool
+runTestSuite = $forAllProperties 
+    (quickCheckWithResult (stdArgs {maxSuccess = 1000}))
 

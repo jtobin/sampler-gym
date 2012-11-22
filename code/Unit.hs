@@ -29,8 +29,8 @@ main = do
                           , alpha   = a0
                           , grid    = Grid 0 gUpper } 
 
-    let pipe0 = runUrn opts g >+> massTransformer >+> printer
-        pipe1 = runUrn opts g >+> massTransformer >+> gaussMixer 1.0 >+> sampler nFlatSamples nParticles opts g
+    let pipe0 = polyaUrn opts g >+> massTransformer >+> printer
+        pipe1 = polyaUrn opts g >+> massTransformer >+> gaussMixer 1.0 >+> sampler nFlatSamples nParticles opts g
 
     runPipe pipe1
 
