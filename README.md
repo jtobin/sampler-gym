@@ -1,2 +1,2 @@
-Some experiments on ensemble & gradient-based samplers.
+A modular benchmark suite for samplers.
 

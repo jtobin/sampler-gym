@@ -1,23 +1,16 @@
-import PolyaUrn
-import Mixture
-import Sampler
+import PolyaUrn    (polyaUrn, Options(..), Grid(..))
+import Mixture     (massTransformer, gaussMixer)
+import FlatSampler (flatMcmcSampler, Options(..), MarkovChain(..))
+import qualified FlatSampler as Flat
 import Control.Pipe
 import Control.Monad
 import Control.Monad.Trans
-import Data.Vector (singleton)
+import qualified Data.Vector as V
 import Data.Word
 import System.Environment
 import System.Random.MWC
 
-printer :: Show b => Consumer b IO ()
-printer = forever $ do
-    x <- await
-    lift $ print x
-
-opts = Options { nepochs = 100
-               , alpha   = 1.0
-               , grid    = Grid 0 10 }
-
+main :: IO ()
 main = do
     args <- getArgs
     let nUrnDraws    = read $ head args :: Int
@@ -25,18 +18,28 @@ main = do
         gUpper       = read $ args !! 2 :: Double
         nFlatSamples = read $ args !! 3 :: Int
         nParticles   = read $ args !! 4 :: Int
-        prngSeed     = read $ args !! 4 :: Word32
+        burnIn       = read $ args !! 5 :: Int
+        thinEvery    = read $ args !! 6 :: Int
+        prngSeed     = read $ args !! 7 :: Word32
 
-        opts    = Options { nepochs = nUrnDraws 
-                          , alpha   = dpAlpha
-                          , grid    = Grid 0 gUpper } 
+        polyaUrnOptions = PolyaUrn.Options { grid    = Grid 0 gUpper
+                                           , nepochs = nUrnDraws
+                                           , alpha   = dpAlpha       }
 
-    g <- initialize (singleton prngSeed)
+        flatOptions     = Flat.Options { _size      = nParticles
+                                       , _nEpochs   = nFlatSamples
+                                       , _burnIn    = burnIn
+                                       , _thinEvery = thinEvery
+                                       , _csize     = 25           }
 
-    let pipe0 =     polyaUrn opts g 
-                >+> massTransformer 
-                >+> gaussMixer 1.0 
-                >+> flatMcmcSampler nFlatSamples nParticles opts g
+    g      <- initialize (V.singleton prngSeed)
+    starts <- replicateM nParticles (replicateM 2 (uniformR (0, gUpper) g))
+
+    let initState = MarkovChain (V.fromList starts) 0
+        pipe0     =     polyaUrn polyaUrnOptions g 
+                    >+> massTransformer 
+                    >+> gaussMixer 1.0 
+                    >+> flatMcmcSampler flatOptions initState g
 
     runPipe pipe0
 

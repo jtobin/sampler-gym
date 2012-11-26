@@ -1,7 +1,12 @@
-{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-unused-binds #-}
 {-# LANGUAGE FlexibleInstances, TemplateHaskell #-}
 
-module PolyaUrn where
+module PolyaUrn ( 
+                -- * Data structures
+                  Grid(..), Options(..), Urn
+                -- * Main functions
+                , polyaUrn
+                ) where
 
 import Control.Pipe
 import Control.Arrow
@@ -23,30 +28,31 @@ import Test.QuickCheck (quickCheckWithResult, stdArgs, maxSuccess)
 
 -- Data/types ------------------------------------------------------------------
 
+-- | 2D Grid to run the Polya Urn scheme over.  Ex: Grid 0 10 represents a grid
+--   with lower-left corner (0, 0) and upper-right corner (10, 10)
 data Grid    = Grid {-# UNPACK #-} !Double {-# UNPACK #-} !Double 
-data Options = Options { grid    :: Grid
+
+-- | Options by which to run the Polya Urn.
+data Options = Options { -- | The Grid to run the Urn scheme over.
+                         grid    :: Grid
+                         -- | The number of epochs to observe the Dirichlet
+                         --   process.
                        , nepochs :: {-# UNPACK #-} !Int
+                         -- | The 'alpha' parameter of the Dirichlet process.
+                         --   Higher numbers yield more clusters.
                        , alpha   :: {-# UNPACK #-} !Double }
+
 type Urn     = HashMap [Double] Int
 type Ball    = ([Double], Int)
 
--- Utils -----------------------------------------------------------------------
+-- Utils (not exported) --------------------------------------------------------
 
+-- | A sampled value from a cumulative distribution.
 sample :: Ord b1 => b1 -> [(b, b1)] -> Maybe b
 sample p = fmap fst . find ((> p) . snd)
 {-# INLINE sample #-}
 
--- Functions -------------------------------------------------------------------
-
-gridBounds :: Grid -> (Double, Double)
-gridBounds (Grid g0 g1) = (g0, g1)
-
-massFunction :: Fractional b => Urn -> [b]
-massFunction urn = 
-    (map snd . HashMap.toList . HashMap.map ((/ n) . fromIntegral)) urn
-  where n = fromIntegral $ ballsInUrn urn
-{-# INLINE massFunction #-}
-
+-- | The cumulative probabilities of an urn's contents.
 cumulativeProbs :: Urn -> [Double]
 cumulativeProbs h = if   n > 0 
                     then   scanl1 (+) . map snd . HashMap.toList 
@@ -55,19 +61,23 @@ cumulativeProbs h = if   n > 0
     where n = fromIntegral $ ballsInUrn h
 {-# INLINE cumulativeProbs #-}
 
+-- | The cumulative mass function of an urn.
 cDist :: Urn -> [([Double], Double)]
 cDist h = uncurry zip . (HashMap.keys &&& cumulativeProbs) $ h
 {-# INLINE cDist #-}
 
+-- | The number of balls in the urn.
 ballsInUrn :: Urn -> Int
 ballsInUrn = HashMap.foldr (+) 0
 {-# INLINE ballsInUrn #-}
 
+-- | Sample a new ball from the grid.
 sampleFromGrid :: PrimMonad m => Grid -> Gen (PrimState m) -> m Ball
 sampleFromGrid g gen = liftM (flip (,) 1) (replicateM 2 (uniformR (g0, g1) gen))
-    where (g0, g1) = gridBounds g
+    where (g0, g1) = (\(Grid gb0 gb1) -> (gb0, gb1)) g
 {-# INLINE sampleFromGrid #-}
 
+-- | Take an existing ball out of an urn.
 sampleFromUrn :: PrimMonad m => Urn -> Gen (PrimState m) -> m Ball
 sampleFromUrn urn g = do
     let m = fromMaybe (error "sampleFromUrn: no ball found") 
@@ -75,9 +85,11 @@ sampleFromUrn urn g = do
     let count = m (HashMap.lookup ball urn)
     return (ball, count + 1)
 {-# INLINE sampleFromUrn #-}
-    
--- Main ------------------------------------------------------------------------
 
+-- Exported functions ----------------------------------------------------------
+
+-- | A Producer that yields an observed Dirichlet process having a 2D Gaussian
+--   base measure, via a Polya Urn scheme.
 polyaUrn :: PrimMonad m => Options -> Gen (PrimState m) -> Producer Urn m ()
 polyaUrn opts g0
     | nepochs opts < 0 = error "observeProcess: iterations must be >= 0."
@@ -109,13 +121,6 @@ prop_sampleFindsElements (Ordered xs) (NonNegative p) =
     if any (> p) (map snd xs) then isJust choice else isNothing choice
   where choice = sample p xs
  
-prop_massFunctionSumsToOne :: Urn -> Bool
-prop_massFunctionSumsToOne urn = (double2Float . sum . massFunction) urn == 1
-
-prop_massFunctionElementsAreProbabilities :: Urn -> Bool
-prop_massFunctionElementsAreProbabilities urn = all (>= 0) m && all (<= 1) m
-    where m = map double2Float $ massFunction urn
-
 prop_ballsCountedCorrectly :: Urn -> Bool
 prop_ballsCountedCorrectly h = ballsInUrn h == numBalls
   where numBalls = foldr ((+) . snd) 0 (HashMap.toList h)
@@ -128,4 +133,7 @@ prop_cumulativeProbsAreProbs h =
 runTestSuite :: IO Bool
 runTestSuite = $forAllProperties 
     (quickCheckWithResult (stdArgs {maxSuccess = 1000}))
+
+main :: IO ()
+main = void runTestSuite
 
