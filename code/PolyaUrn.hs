@@ -1,12 +1,12 @@
 {-# OPTIONS_GHC -Wall -fno-warn-orphans -fno-warn-unused-binds #-}
 {-# LANGUAGE FlexibleInstances, TemplateHaskell #-}
 
-module PolyaUrn ( 
-                -- * Data structures
-                  Grid(..), Options(..), Urn
-                -- * Main functions
-                , polyaUrn
-                ) where
+module PolyaUrn  ( 
+                 -- * Data structures
+                   Options(..), Urn
+                 -- * Main functions
+                 , polyaUrn
+                 ) where
 
 import Control.Pipe
 import Control.Arrow
@@ -28,18 +28,14 @@ import Test.QuickCheck (quickCheckWithResult, stdArgs, maxSuccess)
 
 -- Data/types ------------------------------------------------------------------
 
--- | 2D Grid to run the Polya Urn scheme over.  Ex: Grid 0 10 represents a grid
---   with lower-left corner (0, 0) and upper-right corner (10, 10)
-data Grid    = Grid {-# UNPACK #-} !Double {-# UNPACK #-} !Double 
-
 -- | Options by which to run the Polya Urn.
 data Options = Options { -- | The Grid to run the Urn scheme over.
-                         grid    :: Grid
+                         grid    :: (Double, Double)
                          -- | The number of epochs to observe the Dirichlet
                          --   process.
                        , nepochs :: {-# UNPACK #-} !Int
-                         -- | The 'alpha' parameter of the Dirichlet process.
-                         --   Higher numbers yield more clusters.
+                         -- | The concentration parameter of the Dirichlet 
+                         --   process.  Higher numbers yield more clusters.
                        , alpha   :: {-# UNPACK #-} !Double }
 
 type Urn     = HashMap [Double] Int
@@ -72,9 +68,8 @@ ballsInUrn = HashMap.foldr (+) 0
 {-# INLINE ballsInUrn #-}
 
 -- | Sample a new ball from the grid.
-sampleFromGrid :: PrimMonad m => Grid -> Gen (PrimState m) -> m Ball
-sampleFromGrid g gen = liftM (flip (,) 1) (replicateM 2 (uniformR (g0, g1) gen))
-    where (g0, g1) = (\(Grid gb0 gb1) -> (gb0, gb1)) g
+sampleFromGrid :: PrimMonad m => (Double, Double) -> Gen (PrimState m) -> m Ball
+sampleFromGrid (g0, g1) gen = liftM (flip (,) 1) (replicateM 2 (uniformR (g0, g1) gen))
 {-# INLINE sampleFromGrid #-}
 
 -- | Take an existing ball out of an urn.

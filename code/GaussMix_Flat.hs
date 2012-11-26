@@ -1,14 +1,21 @@
-import PolyaUrn    (polyaUrn, Options(..), Grid(..))
+{-# OPTIONS_GHC -Wall -fno-warn-unused-binds #-}
+
+import PolyaUrn    (polyaUrn)
+import qualified PolyaUrn 
+import Dirichlet   (dirichletMass)
+import qualified Dirichlet 
 import Mixture     (massTransformer, gaussMixer)
 import FlatSampler (flatMcmcSampler, Options(..), MarkovChain(..))
 import qualified FlatSampler as Flat
+
 import Control.Pipe
 import Control.Monad
-import Control.Monad.Trans
 import qualified Data.Vector as V
 import Data.Word
 import System.Environment
 import System.Random.MWC
+
+data GenType = Dirichlet | DirichletProcess deriving (Eq, Read)
 
 main :: IO ()
 main = do
@@ -21,10 +28,14 @@ main = do
         burnIn       = read $ args !! 5 :: Int
         thinEvery    = read $ args !! 6 :: Int
         prngSeed     = read $ args !! 7 :: Word32
+        genType      = read $ args !! 8 :: GenType
 
-        polyaUrnOptions = PolyaUrn.Options { grid    = Grid 0 gUpper
-                                           , nepochs = nUrnDraws
-                                           , alpha   = dpAlpha       }
+        polyaUrnOptions = PolyaUrn.Options { PolyaUrn.grid    = (0, gUpper)
+                                           , PolyaUrn.nepochs = nUrnDraws
+                                           , PolyaUrn.alpha   = dpAlpha     }
+
+        dirichletOptions = Dirichlet.Options { Dirichlet.grid  = (0, gUpper)
+                                             , Dirichlet.alpha = replicate 3 dpAlpha }
 
         flatOptions     = Flat.Options { _size      = nParticles
                                        , _nEpochs   = nFlatSamples
@@ -35,11 +46,20 @@ main = do
     g      <- initialize (V.singleton prngSeed)
     starts <- replicateM nParticles (replicateM 2 (uniformR (0, gUpper) g))
 
-    let initState = MarkovChain (V.fromList starts) 0
-        pipe0     =     polyaUrn polyaUrnOptions g 
+    let initState      = MarkovChain (V.fromList starts) 0
+        sampleWithFlat = flatMcmcSampler flatOptions initState g
+
+        pipe0     =     dirichletMass dirichletOptions g
+                    >+> gaussMixer 1.0
+                    >+> sampleWithFlat
+
+        pipe1     =     polyaUrn polyaUrnOptions g 
                     >+> massTransformer 
                     >+> gaussMixer 1.0 
-                    >+> flatMcmcSampler flatOptions initState g
+                    >+> sampleWithFlat
 
-    runPipe pipe0
+    case genType of 
+        Dirichlet        -> runPipe pipe0
+        DirichletProcess -> runPipe pipe1
+
 
