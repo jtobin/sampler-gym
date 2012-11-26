@@ -72,7 +72,7 @@ gaussMixer :: Double
            -> Pipe [([Double], Double)] ([Double] -> Double) IO ()
 gaussMixer sig = forever $ do
     mass <- await
-    lift $ hPutStrLn stderr "Observed Dirichlet process: "
+    lift $ hPutStrLn stderr "Observed mixing distribution: "
     lift $ printDist stderr mass
     let logMixtureDensity xs = log $ gaussianMixture xs mass sig 
     yield logMixtureDensity

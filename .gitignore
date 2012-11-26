@@ -7,5 +7,5 @@ Unit
 *.pdf
 *.png
 working
-demos
 data/output
+GaussMix_Flat

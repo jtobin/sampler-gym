@@ -19,6 +19,7 @@ data GenType = Dirichlet | DirichletProcess deriving (Eq, Read)
 
 main :: IO ()
 main = do
+    -- Some very basic argument parsing
     args <- getArgs
     let nUrnDraws    = read $ head args :: Int
         dpAlpha      = read $ args !! 1 :: Double
@@ -30,36 +31,33 @@ main = do
         prngSeed     = read $ args !! 7 :: Word32
         genType      = read $ args !! 8 :: GenType
 
-        polyaUrnOptions = PolyaUrn.Options { PolyaUrn.grid    = (0, gUpper)
-                                           , PolyaUrn.nepochs = nUrnDraws
-                                           , PolyaUrn.alpha   = dpAlpha     }
+        -- Options for observing a Dirichlet process via a Polya urn over a grid
+        polyaUrnOptions  = PolyaUrn.Options { PolyaUrn.grid    = (0, gUpper)
+                                            , PolyaUrn.nepochs = nUrnDraws
+                                            , PolyaUrn.alpha   = dpAlpha     }
 
+        -- Options for generating a Dirichlet mixture over a grid
         dirichletOptions = Dirichlet.Options { Dirichlet.grid  = (0, gUpper)
                                              , Dirichlet.alpha = replicate 3 dpAlpha }
 
-        flatOptions     = Flat.Options { _size      = nParticles
-                                       , _nEpochs   = nFlatSamples
-                                       , _burnIn    = burnIn
-                                       , _thinEvery = thinEvery
-                                       , _csize     = 25           }
+        -- Options for the flat-mcmc sampler
+        flatOptions      = Flat.Options { _size      = nParticles
+                                        , _nEpochs   = nFlatSamples
+                                        , _burnIn    = burnIn
+                                        , _thinEvery = thinEvery
+                                        , _csize     = 25           }
 
+    -- Initialize the multiply-with-carry PRNG and initialize flat's ensemble uniformly
+    -- over the grid.
     g      <- initialize (V.singleton prngSeed)
     starts <- replicateM nParticles (replicateM 2 (uniformR (0, gUpper) g))
-
     let initState      = MarkovChain (V.fromList starts) 0
         sampleWithFlat = flatMcmcSampler flatOptions initState g
 
-        pipe0     =     dirichletMass dirichletOptions g
-                    >+> gaussMixer 1.0
-                    >+> sampleWithFlat
+        pipe0 = generator >+> gaussMixer 1.0 >+> sampleWithFlat 
+          where generator = case genType of
+                               Dirichlet        -> dirichletMass dirichletOptions g
+                               DirichletProcess -> polyaUrn polyaUrnOptions g >+> massTransformer
 
-        pipe1     =     polyaUrn polyaUrnOptions g 
-                    >+> massTransformer 
-                    >+> gaussMixer 1.0 
-                    >+> sampleWithFlat
-
-    case genType of 
-        Dirichlet        -> runPipe pipe0
-        DirichletProcess -> runPipe pipe1
-
+    runPipe pipe0
 
