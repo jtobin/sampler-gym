@@ -3,7 +3,7 @@
 
 module Mixture (
                -- * Main functions
-                 massTransformer, gaussMixer
+                 massTransformer, gaussMixer, gaussianMixture
                ) where
 
 import Control.Pipe
@@ -48,13 +48,13 @@ massFunction urn =
   where n = fromIntegral $ HashMap.foldr (+) 0 urn
 {-# INLINE massFunction #-}
 
+-- Exported functions ----------------------------------------------------------
+
 -- | A mixture density of isotropic Gaussians, assembled from a list of means.
 gaussianMixture :: [Double] -> [([Double], Double)] -> Double -> Double
 gaussianMixture xs ms sig = sum $
     zipWith (*) (map snd ms) (map ((\m -> isoGauss m sig xs) . fst) ms)
 {-# INLINE gaussianMixture #-}
-
--- Exported functions ----------------------------------------------------------
 
 -- | A pipe that transforms incoming HashMaps into mass functions over their
 --   contents.
